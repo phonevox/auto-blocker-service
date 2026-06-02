@@ -161,7 +161,19 @@ save_key_config() {
 }
 
 install_service() {
-    cp -f "$0" /usr/local/sbin/phonevox-automacoes
+    local script_path="$0"
+    
+    # Se $0 for relativo, converter para absoluto
+    if [[ ! "$script_path" =~ ^/ ]]; then
+        script_path="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+    fi
+    
+    # Verificar se o script existe
+    if [[ ! -f "$script_path" ]]; then
+        die "Não foi possível encontrar o script em: $script_path"
+    fi
+    
+    cp -f "$script_path" /usr/local/sbin/phonevox-automacoes
     chmod 755 /usr/local/sbin/phonevox-automacoes
 
     cat > /etc/systemd/system/phonevox-automacoes.service <<'EOF'

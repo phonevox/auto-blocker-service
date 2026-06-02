@@ -57,6 +57,7 @@ phonevox-automacoes reconfig   # Regenerar crypted_key
 phonevox-automacoes run        # Executar verificação de status
 phonevox-automacoes status     # Exibir configuração completa
 phonevox-automacoes logs       # Ver últimas 100 linhas do log
+phonevox-automacoes update     # Git pull + atualiza script
 phonevox-automacoes start      # Iniciar service/timer
 phonevox-automacoes stop       # Parar service/timer
 phonevox-automacoes help       # Ver menu de ajuda
@@ -91,7 +92,8 @@ Logs são rotacionados automaticamente quando atingem 10MB. Arquivos antigos fic
    GET /status?type={TYPE}&crypted_key={KEY}&last_status={STATUS}
    ```
 3. **Script processa resposta**:
-   - `HTTP 200` → Executa `pm2 restart all`
+   - `HTTP 200` + last_status = 200 → Sem ação (sistema OK)
+   - `HTTP 200` + last_status ≠ 200 → Executa `pm2 restart all`
    - `HTTP 402` → Executa `pm2 stop all`
    - Outros → Ignora
 
@@ -131,6 +133,11 @@ phonevox-automacoes status
 ### Ver logs em tempo real
 ```bash
 phonevox-automacoes logs
+```
+
+### Atualizar script (git pull + copia para /usr/local/sbin/)
+```bash
+sudo phonevox-automacoes update
 ```
 
 ### Parar temporariamente
@@ -187,7 +194,7 @@ Caso você modifique o script:
 
 ## 📄 Licença
 
-Desenvolvido para Phonevox por Rafael Rizzo.
+Desenvolvido para Phonevox feito por Rafael Rizzo.
 
 ## 📞 Suporte
 18 3256 8306

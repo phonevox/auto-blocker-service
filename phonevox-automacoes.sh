@@ -7,6 +7,7 @@ CONFIG_FILE="$CONFIG_DIR/config"
 LAST_RESPONSE_FILE="$CONFIG_DIR/last_response"
 LOG_FILE="/var/log/phonevox-automacoes.log"
 URL_CONFIG="$CONFIG_DIR/urls"
+LOCK_FILE="/tmp/phonevox-automacoes.lock"
 
 # Cores
 RED='\033[0;31m'
@@ -44,6 +45,36 @@ init_dirs() { mkdir -p "$CONFIG_DIR"; chmod 700 "$CONFIG_DIR"; touch "$LOG_FILE"
 validate_type() { [[ "$1" =~ ^(opa|pabx|did)$ ]] || die "Tipo inválido: '$1'"; }
 validate_code() { [[ -n "$1" && ${#1} -le 255 ]] || die "Code inválido"; }
 
+acquire_lock() {
+    local timeout=30
+    local elapsed=0
+    while [[ -f "$LOCK_FILE" ]] && [[ $elapsed -lt $timeout ]]; do
+        sleep 1
+        ((elapsed++))
+    done
+    touch "$LOCK_FILE"
+}
+
+release_lock() {
+    rm -f "$LOCK_FILE"
+}
+
+find_pm2() {
+    local pm2_paths=(
+        "$(command -v pm2 2>/dev/null)"
+        "/usr/local/bin/pm2"
+        "/usr/bin/pm2"
+        "$HOME/.npm/_npx/*/bin/pm2"
+        "$HOME/.nvm/versions/node/*/bin/pm2"
+    )
+    
+    for path in "${pm2_paths[@]}"; do
+        [[ -x "$path" ]] && echo "$path" && return 0
+    done
+    
+    return 1
+}
+
 load_urls() {
     [[ -f "$URL_CONFIG" ]] && source "$URL_CONFIG" || die "URLs não configuradas. Execute: install"
 }
@@ -57,6 +88,9 @@ generate_register_curl() {
 }
 
 execute_status_check() {
+    acquire_lock
+    trap release_lock EXIT
+    
     load_urls
     source "$CONFIG_FILE"
     
@@ -83,27 +117,35 @@ execute_status_check() {
 
     case "$http_code" in
         200) 
-            if command -v pm2 &> /dev/null; then
-                log "Ação: pm2 restart all"
-                if pm2 restart all >> "$LOG_FILE" 2>&1; then
-                    log "pm2 restart all executado com sucesso"
-                else
-                    log "ERRO ao executar pm2 restart all"
-                fi
+            if [[ "$last_status" == "200" ]]; then
+                log "Status 200 (sem mudança, nenhuma ação)"
             else
-                log "AVISO: pm2 não encontrado"
+                local pm2_bin
+                pm2_bin=$(find_pm2)
+                if [[ -n "$pm2_bin" ]]; then
+                    log "Ação: pm2 restart all"
+                    if "$pm2_bin" restart all >> "$LOG_FILE" 2>&1; then
+                        log "pm2 restart all executado com sucesso"
+                    else
+                        log "ERRO ao executar pm2 restart all"
+                    fi
+                else
+                    log "AVISO: pm2 não encontrado em nenhum caminho"
+                fi
             fi
             ;;
         402) 
-            if command -v pm2 &> /dev/null; then
+            local pm2_bin
+            pm2_bin=$(find_pm2)
+            if [[ -n "$pm2_bin" ]]; then
                 log "Ação: pm2 stop all"
-                if pm2 stop all >> "$LOG_FILE" 2>&1; then
+                if "$pm2_bin" stop all >> "$LOG_FILE" 2>&1; then
                     log "pm2 stop all executado com sucesso"
                 else
                     log "ERRO ao executar pm2 stop all"
                 fi
             else
-                log "AVISO: pm2 não encontrado"
+                log "AVISO: pm2 não encontrado em nenhum caminho"
             fi
             ;;
         *) log "Status $http_code ignorado" ;;
@@ -163,7 +205,7 @@ cmd_install() {
     printf '%b\n' "${CYAN}═══════════════════════════════════════${NC}"
     printf '\n'
     
-    read -rp "$(printf '%b' "${BLUE}URL Base${NC}") (ex: https://url_webhook.com.br): " URL_BASE
+    read -rp "$(printf '%b' "${BLUE}URL Base${NC}") (ex: https://auto-blocker.falevox.com.br): " URL_BASE
     [[ -z "$URL_BASE" ]] && die "URL_BASE vazio"
     [[ "$URL_BASE" != https://* ]] && URL_BASE="https://${URL_BASE}"
     
@@ -209,7 +251,7 @@ cmd_reconfig() {
     printf '%b\n' "${BOLD}  Reconfiguração - Phonevox Automações${NC}"
     printf '%b\n' "${CYAN}═══════════════════════════════════════${NC}\n"
 
-    printf '%b\n' "Tipos disponíveis: ${YELLOW}opa${NC}, ${YELLOW}pabx${NC}"
+    printf '%b\n' "Tipos disponíveis: ${YELLOW}opa${NC}, ${YELLOW}pabx${NC}, ${YELLOW}did${NC}"
     read -rp "$(printf '%b' "${BLUE}Type${NC}"): " TYPE
     validate_type "$TYPE"
     
@@ -320,6 +362,7 @@ cmd_help() {
     printf '%b\n' "  ${YELLOW}run${NC}        Executa verificação de status"
     printf '%b\n' "  ${YELLOW}status${NC}     Exibe config completa"
     printf '%b\n' "  ${YELLOW}logs${NC}       Exibe últimas 100 linhas do log"
+    printf '%b\n' "  ${YELLOW}update${NC}     Faz git pull e atualiza script"
     printf '%b\n' "  ${YELLOW}start${NC}      Inicia o service e timer"
     printf '%b\n' "  ${YELLOW}stop${NC}       Para o service e timer"
     printf '%b\n' "  ${YELLOW}help${NC}       Este menu"
@@ -337,12 +380,32 @@ cmd_logs() {
     fi
 }
 
+cmd_update() {
+    require_root
+    
+    printf '%b\n' "${CYAN}════════════════════════════════════════${NC}"
+    printf '%b\n' "${BOLD}  Atualizando Script${NC}"
+    printf '%b\n' "${CYAN}════════════════════════════════════════${NC}\n"
+    
+    if ! git -C "$(dirname "$0")" pull; then
+        die "Erro ao fazer git pull"
+    fi
+    
+    printf '%b\n' "${GREEN}✓ Git pull realizado${NC}\n"
+    
+    cp -f "$0" /usr/local/sbin/phonevox-automacoes
+    chmod 755 /usr/local/sbin/phonevox-automacoes
+    
+    printf '%b\n' "${GREEN}✓ Script atualizado em /usr/local/sbin/phonevox-automacoes${NC}"
+}
+
 case "${1:-help}" in
     install) cmd_install ;;
     reconfig) cmd_reconfig ;;
     run) cmd_run ;;
     status) cmd_status ;;
     logs) cmd_logs ;;
+    update) cmd_update ;;
     start) cmd_start ;;
     stop) cmd_stop ;;
     *) cmd_help ;;

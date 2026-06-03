@@ -8,6 +8,7 @@ LAST_RESPONSE_FILE="$CONFIG_DIR/last_response"
 LOG_FILE="/var/log/phonevox-automacoes.log"
 URL_CONFIG="$CONFIG_DIR/urls"
 LOCK_FILE="/tmp/phonevox-automacoes.lock"
+DRY_RUN="${DRY_RUN:-0}"
 
 # Cores
 RED='\033[0;31m'
@@ -38,6 +39,7 @@ rotate_logs() {
         fi
     fi
 }
+
 die() { printf '%b\n' "${RED}[ERRO]${NC} $*" >&2; exit 1; }
 require_root() { [[ $EUID -ne 0 ]] && die "Execute como root."; }
 init_dirs() { mkdir -p "$CONFIG_DIR"; chmod 700 "$CONFIG_DIR"; touch "$LOG_FILE"; chmod 600 "$LOG_FILE"; }
@@ -77,6 +79,19 @@ find_pm2() {
 
 load_urls() {
     [[ -f "$URL_CONFIG" ]] && source "$URL_CONFIG" || die "URLs não configuradas. Execute: install"
+}
+
+execute_command() {
+    local cmd="$1"
+    if [[ $DRY_RUN -eq 1 ]]; then
+        log "[DRY-RUN] Seria executado: $cmd"
+    else
+        if eval "$cmd"; then
+            log "Comando executado com sucesso: $cmd"
+        else
+            log "ERRO ao executar: $cmd"
+        fi
+    fi
 }
 
 generate_register_curl() {
@@ -124,11 +139,7 @@ execute_status_check() {
                 pm2_bin=$(find_pm2)
                 if [[ -n "$pm2_bin" ]]; then
                     log "Ação: pm2 restart all"
-                    if "$pm2_bin" restart all >> "$LOG_FILE" 2>&1; then
-                        log "pm2 restart all executado com sucesso"
-                    else
-                        log "ERRO ao executar pm2 restart all"
-                    fi
+                    execute_command "\"$pm2_bin\" restart all >> \"$LOG_FILE\" 2>&1"
                 else
                     log "AVISO: pm2 não encontrado em nenhum caminho"
                 fi
@@ -139,11 +150,7 @@ execute_status_check() {
             pm2_bin=$(find_pm2)
             if [[ -n "$pm2_bin" ]]; then
                 log "Ação: pm2 stop all"
-                if "$pm2_bin" stop all >> "$LOG_FILE" 2>&1; then
-                    log "pm2 stop all executado com sucesso"
-                else
-                    log "ERRO ao executar pm2 stop all"
-                fi
+                execute_command "\"$pm2_bin\" stop all >> \"$LOG_FILE\" 2>&1"
             else
                 log "AVISO: pm2 não encontrado em nenhum caminho"
             fi
@@ -163,12 +170,10 @@ save_key_config() {
 install_service() {
     local script_path="$0"
     
-    # Se $0 for relativo, converter para absoluto
     if [[ ! "$script_path" =~ ^/ ]]; then
         script_path="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
     fi
     
-    # Verificar se o script existe
     if [[ ! -f "$script_path" ]]; then
         die "Não foi possível encontrar o script em: $script_path"
     fi
@@ -297,6 +302,10 @@ cmd_run() {
     require_root
     [[ -f "$KEY_FILE" && -f "$CONFIG_FILE" ]] || die "Config não encontrada. Execute: install"
     
+    if [[ $DRY_RUN -eq 1 ]]; then
+        log "========== MODO DRY-RUN ATIVADO =========="
+    fi
+    
     execute_status_check
 }
 
@@ -367,18 +376,21 @@ cmd_help() {
     printf '%b\n' "${CYAN}════════════════════════════════════════${NC}"
     printf '%b\n' "${BOLD}  Phonevox Automações${NC}"
     printf '%b\n' "${CYAN}════════════════════════════════════════${NC}\n"
-    printf '%b\n' "${BOLD}Uso:${NC} phonevox-automacoes <comando>\n"
-    printf '%b\n' "${BOLD}Comandos:${NC}"
-    printf '%b\n' "  ${YELLOW}install${NC}    Configura URL base, type/code, gera curl e instala service"
-    printf '%b\n' "  ${YELLOW}reconfig${NC}   Regenera nova key"
-    printf '%b\n' "  ${YELLOW}run${NC}        Executa verificação de status"
-    printf '%b\n' "  ${YELLOW}status${NC}     Exibe config completa"
-    printf '%b\n' "  ${YELLOW}logs${NC}       Exibe últimas 100 linhas do log"
-    printf '%b\n' "  ${YELLOW}update${NC}     Faz git pull e atualiza script"
-    printf '%b\n' "  ${YELLOW}start${NC}      Inicia o service e timer"
-    printf '%b\n' "  ${YELLOW}stop${NC}       Para o service e timer"
-    printf '%b\n' "  ${YELLOW}help${NC}       Este menu"
+    printf '%b\n' "${BOLD}Uso:${NC} phonevox-automacoes [opção] [flag]\n"
+    printf '%b\n' "${BOLD}Opções:${NC}"
+    printf '%b\n' "  ${YELLOW}--install${NC}   Configura URL base, type/code, gera curl e instala service"
+    printf '%b\n' "  ${YELLOW}--reconfig${NC}  Regenera nova key"
+    printf '%b\n' "  ${YELLOW}--run${NC}       Executa verificação de status"
+    printf '%b\n' "  ${YELLOW}--status${NC}    Exibe config completa"
+    printf '%b\n' "  ${YELLOW}--logs${NC}      Exibe últimas 100 linhas do log"
+    printf '%b\n' "  ${YELLOW}--update${NC}    Faz git pull e atualiza script"
+    printf '%b\n' "  ${YELLOW}--start${NC}     Inicia o service e timer"
+    printf '%b\n' "  ${YELLOW}--stop${NC}      Para o service e timer"
+    printf '%b\n' "  ${YELLOW}--help${NC}      Este menu\n"
+    printf '%b\n' "${BOLD}Flags:${NC}"
+    printf '%b\n' "  ${YELLOW}--dry-run${NC}   (com --run) Testa sem executar pm2"
 }
+
 
 cmd_logs() {
     printf '%b\n' "${CYAN}════════════════════════════════════════${NC}"
@@ -411,14 +423,15 @@ cmd_update() {
     printf '%b\n' "${GREEN}✓ Script atualizado em /usr/local/sbin/phonevox-automacoes${NC}"
 }
 
-case "${1:-help}" in
-    install) cmd_install ;;
-    reconfig) cmd_reconfig ;;
-    run) cmd_run ;;
-    status) cmd_status ;;
-    logs) cmd_logs ;;
-    update) cmd_update ;;
-    start) cmd_start ;;
-    stop) cmd_stop ;;
+case "${1:---help}" in
+    --install) cmd_install ;;
+    --reconfig) cmd_reconfig ;;
+    --run) shift; [[ "$1" == "--dry-run" ]] && DRY_RUN=1; cmd_run ;;
+    --status) cmd_status ;;
+    --logs) cmd_logs ;;
+    --update) cmd_update ;;
+    --start) cmd_start ;;
+    --stop) cmd_stop ;;
+    --help) cmd_help ;;
     *) cmd_help ;;
 esac

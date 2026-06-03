@@ -421,8 +421,10 @@ cmd_update() {
     
     cp -f "$repo_dir/phonevox-automacoes.sh" /usr/local/sbin/phonevox-automacoes
     chmod 755 /usr/local/sbin/phonevox-automacoes
-    
     printf '%b\n' "${GREEN}✓ Script atualizado em /usr/local/sbin/phonevox-automacoes${NC}"
+
+    install_service
+    printf '%b\n' "${GREEN}✓ Systemd units atualizados${NC}"
 }
 
 case "${1:---help}" in

@@ -411,13 +411,16 @@ cmd_update() {
     printf '%b\n' "${BOLD}  Atualizando Script${NC}"
     printf '%b\n' "${CYAN}════════════════════════════════════════${NC}\n"
     
-    if ! git -C "$(dirname "$0")" pull; then
-        die "Erro ao fazer git pull"
+    local repo_dir
+    repo_dir=$(git rev-parse --show-toplevel 2>/dev/null) || die "Execute dentro do diretório do repositório git"
+    
+    if ! git -C "$repo_dir" pull; then
+        die "Erro ao fazer git pull em $repo_dir"
     fi
     
     printf '%b\n' "${GREEN}✓ Git pull realizado${NC}\n"
     
-    cp -f "$0" /usr/local/sbin/phonevox-automacoes
+    cp -f "$repo_dir/phonevox-automacoes.sh" /usr/local/sbin/phonevox-automacoes
     chmod 755 /usr/local/sbin/phonevox-automacoes
     
     printf '%b\n' "${GREEN}✓ Script atualizado em /usr/local/sbin/phonevox-automacoes${NC}"

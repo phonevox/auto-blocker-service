@@ -188,7 +188,7 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/sbin/phonevox-automacoes run
+ExecStart=/usr/local/sbin/phonevox-automacoes --run
 User=root
 StandardOutput=append:/var/log/phonevox-automacoes.log
 StandardError=append:/var/log/phonevox-automacoes.log

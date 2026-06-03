@@ -23,7 +23,7 @@ chmod +x phonevox-automacoes.sh
 
 ### 2. Executar instalação (como root)
 ```bash
-sudo bash phonevox-automacoes.sh install
+sudo bash phonevox-automacoes.sh --install
 ```
 
 ### 3. Durante a instalação você precisará:
@@ -46,21 +46,22 @@ Este comando retornará um `crypted_key` que você cola de volta no script.
 Após colar a `crypted_key`, o script irá:
 - Salvar a configuração
 - Instalar o systemd service
-- Ativar o timer (executa a cada 30 minutos)
+- Ativar o timer (executa a cada 10 minutos)
 - Executar verificação inicial de status
 
 ## 📖 Comandos
 
 ```bash
-phonevox-automacoes install    # Configurar e instalar
-phonevox-automacoes reconfig   # Regenerar crypted_key
-phonevox-automacoes run        # Executar verificação de status
-phonevox-automacoes status     # Exibir configuração completa
-phonevox-automacoes logs       # Ver últimas 100 linhas do log
-phonevox-automacoes update     # Git pull + atualiza script
-phonevox-automacoes start      # Iniciar service/timer
-phonevox-automacoes stop       # Parar service/timer
-phonevox-automacoes help       # Ver menu de ajuda
+phonevox-automacoes --install       # Configurar e instalar
+phonevox-automacoes --reconfig      # Regenerar crypted_key
+phonevox-automacoes --run           # Executar verificação de status
+phonevox-automacoes --run --dry-run # Testar sem executar pm2
+phonevox-automacoes --status        # Exibir configuração completa
+phonevox-automacoes --logs          # Ver últimas 100 linhas do log
+phonevox-automacoes --update        # Git pull + atualiza script
+phonevox-automacoes --start         # Iniciar service/timer
+phonevox-automacoes --stop          # Parar service/timer
+phonevox-automacoes --help          # Ver menu de ajuda
 ```
 
 ## ⚙️ Configuração
@@ -117,37 +118,43 @@ Logs são rotacionados automaticamente quando atingem 10MB. Arquivos antigos fic
 
 ### Instalar pela primeira vez
 ```bash
-sudo bash phonevox-automacoes.sh install
+sudo bash phonevox-automacoes.sh --install
 ```
 
 ### Regenerar chave (mesma URL)
 ```bash
-sudo phonevox-automacoes reconfig
+sudo phonevox-automacoes --reconfig
 ```
 
 ### Ver status atual
 ```bash
-phonevox-automacoes status
+phonevox-automacoes --status
 ```
 
 ### Ver logs em tempo real
 ```bash
-phonevox-automacoes logs
+phonevox-automacoes --logs
+tail -f /var/log/phonevox-automacoes.log
 ```
 
 ### Atualizar script (git pull + copia para /usr/local/sbin/)
 ```bash
-sudo phonevox-automacoes update
+sudo phonevox-automacoes --update
 ```
 
 ### Parar temporariamente
 ```bash
-sudo phonevox-automacoes stop
+sudo phonevox-automacoes --stop
 ```
 
 ### Reiniciar
 ```bash
-sudo phonevox-automacoes start
+sudo phonevox-automacoes --start
+```
+
+### Testar sem executar ações (dry-run)
+```bash
+sudo phonevox-automacoes --run --dry-run
 ```
 
 ## 🐛 Troubleshooting
@@ -166,7 +173,7 @@ Verifique se:
 
 ### Verificar logs
 ```bash
-phonevox-automacoes logs
+phonevox-automacoes --logs
 tail -f /var/log/phonevox-automacoes.log
 ```
 
@@ -178,18 +185,26 @@ systemctl list-timers phonevox-automacoes.timer
 
 ### Executar verificação manual
 ```bash
-sudo phonevox-automacoes run
+sudo phonevox-automacoes --run
 ```
 
 ## 📋 Variáveis de ambiente
 
-Nenhuma variável de ambiente obrigatória. Tudo é configurado durante `install`.
+| Variável  | Padrão | Descrição                                      |
+|-----------|--------|------------------------------------------------|
+| `DRY_RUN` | `0`    | Se `1`, simula ações sem executar pm2 de fato  |
+
+Também pode ser passada inline:
+```bash
+DRY_RUN=1 sudo phonevox-automacoes --run
+# equivalente a:
+sudo phonevox-automacoes --run --dry-run
+```
 
 ## 🔄 Modificações após instalação
 
-Caso você modifique o script:
-1. **Apenas atualizar script**: O arquivo em `/usr/local/sbin/` será atualizado automaticamente ao rodar `install`
-2. **Alterar URL/Type/Code**: Use `reconfig`
+1. **Atualizar script**: `sudo phonevox-automacoes --update` (git pull + copia para `/usr/local/sbin/`)
+2. **Alterar URL/Type/Code**: `sudo phonevox-automacoes --reconfig`
 3. **Recarregar timer**: `systemctl daemon-reload && systemctl restart phonevox-automacoes.timer`
 
 ## 📄 Licença

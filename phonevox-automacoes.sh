@@ -200,8 +200,7 @@ Description=Phonevox Automacoes
 Requires=phonevox-automacoes.service
 
 [Timer]
-OnBootSec=2min
-OnUnitActiveSec=10min
+OnCalendar=*:0/10
 Persistent=true
 
 [Install]

@@ -1,6 +1,6 @@
 # Phonevox Automações
 
-Script bash para gerenciar automações do Phonevox com verificação de status automática via webhook.
+Script bash para gerenciar automações do Phonevox com verificação de status automática via API REST.
 
 ## 📋 Características
 
@@ -8,28 +8,30 @@ Script bash para gerenciar automações do Phonevox com verificação de status 
 - ✅ Timer para execução a cada 10 minutos
 - ✅ Verificação de status via API REST
 - ✅ Integração com PM2 para restart/stop automático
+- ✅ Reutiliza configs existentes no `--install` sem pedir novamente
+- ✅ Atualização via `--update` de qualquer diretório
 - ✅ Rotação de logs nativa (máx 10MB)
-- ✅ Geração automática de comando curl para registro
-- ✅ Validação de URLs com https:// automático
 - ✅ Suporte a cores no terminal
 
 ## 🚀 Instalação
 
-### 1. Download
+### 1. Clonar o repositório (como root)
 ```bash
-curl -O https://seu-servidor/phonevox-automacoes.sh
-chmod +x phonevox-automacoes.sh
+git clone https://github.com/phonevox/auto-blocker-opa.git
+cd auto-blocker-opa
 ```
 
-### 2. Executar instalação (como root)
+### 2. Executar instalação
 ```bash
 sudo bash phonevox-automacoes.sh --install
 ```
 
 ### 3. Durante a instalação você precisará:
-- **URL Base**: Digite a URL do seu servidor (ex: `https://auto-blocker.falevox.com.br`)
-- **Type**: Escolha entre `opa`, `pabx` ou `did`
+- **URL Base**: URL do servidor (ex: `https://auto-blocker.falevox.com.br`)
+- **Type**: `opa`, `pabx` ou `did`
 - **Code**: Código único para sua instalação (máx 255 caracteres)
+
+> Se já existirem configs salvas em `/etc/phonevox/automacoes/`, o `--install` as reutiliza sem pedir novamente.
 
 ### 4. Executar comando curl em rede permitida
 O script gerará um comando curl que **DEVE ser executado apenas em uma máquina na rede permitida (VPN/Interna)**:
@@ -52,15 +54,17 @@ Após colar a `crypted_key`, o script irá:
 ## 📖 Comandos
 
 ```bash
-phonevox-automacoes --install       # Configurar e instalar
+phonevox-automacoes --install       # Configurar e instalar (reutiliza configs se existirem)
 phonevox-automacoes --reconfig      # Regenerar crypted_key
 phonevox-automacoes --run           # Executar verificação de status
 phonevox-automacoes --run --dry-run # Testar sem executar pm2
 phonevox-automacoes --status        # Exibir configuração completa
 phonevox-automacoes --logs          # Ver últimas 100 linhas do log
-phonevox-automacoes --update        # Git pull + atualiza script
+phonevox-automacoes --update        # Git pull + atualiza script (funciona de qualquer diretório)
 phonevox-automacoes --start         # Iniciar service/timer
 phonevox-automacoes --stop          # Parar service/timer
+phonevox-automacoes --remove        # Remove service, timer e binário (pergunta sobre configs)
+phonevox-automacoes --fix-bin       # Copia script do repo para /usr/local/sbin (emergência)
 phonevox-automacoes --help          # Ver menu de ajuda
 ```
 
@@ -72,7 +76,8 @@ phonevox-automacoes --help          # Ver menu de ajuda
 ├── config              # TYPE e CODE
 ├── crypted_key         # Chave criptografada
 ├── urls                # URL_BASE e endpoints
-└── last_response       # Último status HTTP
+├── repo_path           # Caminho do repositório git (usado pelo --update)
+└── last_response       # Último status HTTP (200 ou 402 apenas)
 ```
 
 ### Log
@@ -90,20 +95,21 @@ Logs são rotacionados automaticamente quando atingem 10MB. Arquivos antigos fic
 1. **Timer executa a cada 10 minutos** (configurável em `/etc/systemd/system/phonevox-automacoes.timer`)
 2. **Script verifica status** via GET request:
    ```
-   GET /status?type={TYPE}&crypted_key={KEY}&last_status={STATUS}
+   GET /?type={TYPE}&crypted_key={KEY}&last_status={STATUS}
    ```
 3. **Script processa resposta**:
    - `HTTP 200` + last_status = 200 → Sem ação (sistema OK)
    - `HTTP 200` + last_status ≠ 200 → Executa `pm2 restart all`
    - `HTTP 402` → Executa `pm2 stop all`
-   - Outros → Ignora
+   - Qualquer outro código → Ignora, **não altera o last_status salvo**
 
-4. **Salva último status** em `/etc/phonevox/automacoes/last_response`
+4. **Salva último status** apenas para respostas 200 ou 402 — outros códigos (308, 404, 500, etc.) são ignorados sem sobrescrever o estado anterior
 
 ## ⚠️ Requisitos
 
 - **Bash** 4+
-- **curl** (para requisições HTTP)
+- **curl**
+- **git** (para `--update`)
 - **Python 3** (para URL encoding)
 - **PM2** (opcional, para restart/stop automático)
 - **root** (para instalar service systemd)
@@ -111,45 +117,48 @@ Logs são rotacionados automaticamente quando atingem 10MB. Arquivos antigos fic
 ## 🔐 Segurança
 
 - ⚠️ **IMPORTANTE**: A requisição de registro (`/register`) **DEVE ser executada APENAS em rede permitida (VPN/Interna)**
-- Chave criptografada salva em `/etc/phonevox/automacoes/crypted_key` com permissões 600
+- Chave criptografada salva com permissões 600
 - Todos os arquivos de configuração têm permissões restritivas (600/700)
 
 ## 📝 Exemplos de uso
 
 ### Instalar pela primeira vez
 ```bash
+cd auto-blocker-opa
 sudo bash phonevox-automacoes.sh --install
 ```
 
-### Regenerar chave (mesma URL)
+### Reinstalar sem perder configurações
+```bash
+sudo phonevox-automacoes --install
+# detecta configs existentes e pula os prompts
+```
+
+### Regenerar chave
 ```bash
 sudo phonevox-automacoes --reconfig
 ```
 
-### Ver status atual
-```bash
-phonevox-automacoes --status
-```
-
-### Ver logs em tempo real
-```bash
-phonevox-automacoes --logs
-tail -f /var/log/phonevox-automacoes.log
-```
-
-### Atualizar script (git pull + copia para /usr/local/sbin/)
+### Atualizar script (de qualquer diretório)
 ```bash
 sudo phonevox-automacoes --update
 ```
 
-### Parar temporariamente
+### Corrigir binário manualmente em emergência
 ```bash
-sudo phonevox-automacoes --stop
+sudo phonevox-automacoes --fix-bin
+# encontra o repo automaticamente e copia para /usr/local/sbin
 ```
 
-### Reiniciar
+### Remover completamente
 ```bash
-sudo phonevox-automacoes --start
+sudo phonevox-automacoes --remove
+# pergunta se deseja remover configs também
+```
+
+### Ver logs em tempo real
+```bash
+tail -f /var/log/phonevox-automacoes.log
 ```
 
 ### Testar sem executar ações (dry-run)
@@ -159,25 +168,18 @@ sudo phonevox-automacoes --run --dry-run
 
 ## 🐛 Troubleshooting
 
+### Binário desatualizado após git pull manual
+```bash
+sudo phonevox-automacoes --fix-bin
+```
+
 ### PM2 não encontrado
-Se PM2 não estiver instalado, o script apenas loga um aviso e continua executando. Para instalar PM2:
+O script loga um aviso e continua. Para instalar:
 ```bash
 npm install -g pm2
 ```
 
-### Erro ao executar curl
-Verifique se:
-- URL Base está correta (com `https://`)
-- Você tem conexão com a internet
-- O firewall permite requisições HTTPS
-
-### Verificar logs
-```bash
-phonevox-automacoes --logs
-tail -f /var/log/phonevox-automacoes.log
-```
-
-### Verificar timer status
+### Verificar timer
 ```bash
 systemctl status phonevox-automacoes.timer
 systemctl list-timers phonevox-automacoes.timer
@@ -190,26 +192,19 @@ sudo phonevox-automacoes --run
 
 ## 📋 Variáveis de ambiente
 
-| Variável  | Padrão | Descrição                                      |
-|-----------|--------|------------------------------------------------|
-| `DRY_RUN` | `0`    | Se `1`, simula ações sem executar pm2 de fato  |
+| Variável  | Padrão | Descrição                                     |
+|-----------|--------|-----------------------------------------------|
+| `DRY_RUN` | `0`    | Se `1`, simula ações sem executar pm2 de fato |
 
-Também pode ser passada inline:
 ```bash
 DRY_RUN=1 sudo phonevox-automacoes --run
 # equivalente a:
 sudo phonevox-automacoes --run --dry-run
 ```
 
-## 🔄 Modificações após instalação
-
-1. **Atualizar script**: `sudo phonevox-automacoes --update` (git pull + copia para `/usr/local/sbin/`)
-2. **Alterar URL/Type/Code**: `sudo phonevox-automacoes --reconfig`
-3. **Recarregar timer**: `systemctl daemon-reload && systemctl restart phonevox-automacoes.timer`
-
 ## 📄 Licença
 
-Desenvolvido para Phonevox feito por Rafael Rizzo.
+Desenvolvido para Phonevox por Rafael Rizzo.
 
 ## 📞 Suporte
 18 3256 8306

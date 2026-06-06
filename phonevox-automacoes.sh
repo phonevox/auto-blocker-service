@@ -430,6 +430,7 @@ cmd_help() {
     printf '%b\n' "  ${YELLOW}--start${NC}     Inicia o service e timer"
     printf '%b\n' "  ${YELLOW}--stop${NC}      Para o service e timer"
     printf '%b\n' "  ${YELLOW}--remove${NC}    Remove service, timer e binário (pergunta sobre configs)"
+    printf '%b\n' "  ${YELLOW}--fix-bin${NC}   Copia o script do repo para /usr/local/sbin (emergência)"
     printf '%b\n' "  ${YELLOW}--help${NC}      Este menu\n"
     printf '%b\n' "${BOLD}Flags:${NC}"
     printf '%b\n' "  ${YELLOW}--dry-run${NC}   (com --run) Testa sem executar pm2"
@@ -448,20 +449,12 @@ cmd_logs() {
     fi
 }
 
-cmd_update() {
-    require_root
-    
-    printf '%b\n' "${CYAN}════════════════════════════════════════${NC}"
-    printf '%b\n' "${BOLD}  Atualizando Script${NC}"
-    printf '%b\n' "${CYAN}════════════════════════════════════════${NC}\n"
-    
+resolve_repo_dir() {
     local repo_dir
     repo_dir=$(git rev-parse --show-toplevel 2>/dev/null)
-    if [[ -z "$repo_dir" ]]; then
-        if [[ -f "$REPO_FILE" ]]; then
-            repo_dir=$(cat "$REPO_FILE")
-            [[ -d "$repo_dir/.git" ]] || repo_dir=""
-        fi
+    if [[ -z "$repo_dir" ]] && [[ -f "$REPO_FILE" ]]; then
+        repo_dir=$(cat "$REPO_FILE")
+        [[ -d "$repo_dir/.git" ]] || repo_dir=""
     fi
     if [[ -z "$repo_dir" ]]; then
         while IFS= read -r g; do
@@ -475,6 +468,27 @@ cmd_update() {
     [[ -n "$repo_dir" ]] || die "Repo git não encontrado. Clone o repositório e execute --install a partir dele."
     printf '%s\n' "$repo_dir" > "$REPO_FILE"
     chmod 600 "$REPO_FILE"
+    echo "$repo_dir"
+}
+
+cmd_fix_bin() {
+    require_root
+    local repo_dir
+    repo_dir=$(resolve_repo_dir)
+    cp -f "$repo_dir/phonevox-automacoes.sh" /usr/local/sbin/phonevox-automacoes
+    chmod 755 /usr/local/sbin/phonevox-automacoes
+    printf '%b\n' "${GREEN}✓ Binário copiado de ${repo_dir} para /usr/local/sbin/phonevox-automacoes${NC}"
+}
+
+cmd_update() {
+    require_root
+
+    printf '%b\n' "${CYAN}════════════════════════════════════════${NC}"
+    printf '%b\n' "${BOLD}  Atualizando Script${NC}"
+    printf '%b\n' "${CYAN}════════════════════════════════════════${NC}\n"
+
+    local repo_dir
+    repo_dir=$(resolve_repo_dir)
     
     if ! git -C "$repo_dir" pull; then
         die "Erro ao fazer git pull em $repo_dir"
@@ -501,6 +515,7 @@ case "${1:---help}" in
     --start) cmd_start ;;
     --stop) cmd_stop ;;
     --remove) cmd_remove ;;
+    --fix-bin) cmd_fix_bin ;;
     --help) cmd_help ;;
     *) cmd_help ;;
 esac

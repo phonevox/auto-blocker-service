@@ -7,6 +7,7 @@ CONFIG_FILE="$CONFIG_DIR/config"
 LAST_RESPONSE_FILE="$CONFIG_DIR/last_response"
 LOG_FILE="/var/log/phonevox-automacoes.log"
 URL_CONFIG="$CONFIG_DIR/urls"
+REPO_FILE="$CONFIG_DIR/repo_path"
 LOCK_FILE="/tmp/phonevox-automacoes.lock"
 DRY_RUN="${DRY_RUN:-0}"
 
@@ -171,15 +172,22 @@ save_key_config() {
 
 install_service() {
     local script_path="$0"
-    
+
     if [[ ! "$script_path" =~ ^/ ]]; then
         script_path="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
     fi
-    
+
     if [[ ! -f "$script_path" ]]; then
         die "Não foi possível encontrar o script em: $script_path"
     fi
-    
+
+    local repo_dir
+    repo_dir=$(git -C "$(dirname "$script_path")" rev-parse --show-toplevel 2>/dev/null) || true
+    if [[ -n "$repo_dir" ]]; then
+        printf '%s\n' "$repo_dir" > "$REPO_FILE"
+        chmod 600 "$REPO_FILE"
+    fi
+
     cp -f "$script_path" /usr/local/sbin/phonevox-automacoes
     chmod 755 /usr/local/sbin/phonevox-automacoes
 
@@ -448,7 +456,25 @@ cmd_update() {
     printf '%b\n' "${CYAN}════════════════════════════════════════${NC}\n"
     
     local repo_dir
-    repo_dir=$(git rev-parse --show-toplevel 2>/dev/null) || die "Execute dentro do diretório do repositório git"
+    repo_dir=$(git rev-parse --show-toplevel 2>/dev/null)
+    if [[ -z "$repo_dir" ]]; then
+        if [[ -f "$REPO_FILE" ]]; then
+            repo_dir=$(cat "$REPO_FILE")
+            [[ -d "$repo_dir/.git" ]] || repo_dir=""
+        fi
+    fi
+    if [[ -z "$repo_dir" ]]; then
+        while IFS= read -r g; do
+            d="${g%/.git}"
+            if [[ -f "$d/phonevox-automacoes.sh" ]]; then
+                repo_dir="$d"
+                break
+            fi
+        done < <(find /root /home /opt /srv -maxdepth 5 -name ".git" -type d 2>/dev/null)
+    fi
+    [[ -n "$repo_dir" ]] || die "Repo git não encontrado. Clone o repositório e execute --install a partir dele."
+    printf '%s\n' "$repo_dir" > "$REPO_FILE"
+    chmod 600 "$REPO_FILE"
     
     if ! git -C "$repo_dir" pull; then
         die "Erro ao fazer git pull em $repo_dir"

@@ -1,0 +1,77 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Tipo de bump'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-tags: true
+          fetch-depth: 0
+
+      - name: Calcular próxima versão
+        id: version
+        run: |
+          LATEST=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+          if [[ -z "$LATEST" ]]; then
+            LATEST="v0.0.0"
+          fi
+          echo "Última tag: $LATEST"
+
+          MAJOR=$(echo "$LATEST" | cut -d. -f1 | tr -d 'v')
+          MINOR=$(echo "$LATEST" | cut -d. -f2)
+          PATCH=$(echo "$LATEST" | cut -d. -f3)
+
+          case "${{ github.event.inputs.bump }}" in
+            major) MAJOR=$((MAJOR+1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR+1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH+1)) ;;
+          esac
+
+          NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
+          echo "Nova tag: $NEW_TAG"
+          echo "tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
+          echo "prev=$LATEST" >> "$GITHUB_OUTPUT"
+
+      - name: Gerar changelog
+        id: changelog
+        run: |
+          PREV="${{ steps.version.outputs.prev }}"
+          if [[ "$PREV" == "v0.0.0" ]]; then
+            LOG=$(git log --oneline | head -20)
+          else
+            LOG=$(git log "${PREV}..HEAD" --oneline)
+          fi
+          echo "log<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$LOG" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Criar tag e release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          git tag "$TAG"
+          git push origin "$TAG"
+
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes "## Changelog
+          ${{ steps.changelog.outputs.log }}" \
+            phonevox-automacoes.sh

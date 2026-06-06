@@ -126,12 +126,12 @@ execute_status_check() {
     http_code=$(curl -sL --max-time 30 -o /dev/null -w "%{http_code}" \
         "${API_STATUS}?type=${TYPE}&crypted_key=${encoded_key}&last_status=${last_status}")
 
-    printf 'HTTP_STATUS=%s\nTIMESTAMP="%s"\n' "$http_code" "$(date '+%Y-%m-%d %H:%M:%S')" > "$LAST_RESPONSE_FILE"
-    chmod 600 "$LAST_RESPONSE_FILE"
     log "HTTP Status: $http_code"
 
     case "$http_code" in
-        200) 
+        200)
+            printf 'HTTP_STATUS=%s\nTIMESTAMP="%s"\n' "$http_code" "$(date '+%Y-%m-%d %H:%M:%S')" > "$LAST_RESPONSE_FILE"
+            chmod 600 "$LAST_RESPONSE_FILE"
             if [[ "$last_status" == "200" ]]; then
                 log "Status 200 (sem mudança, nenhuma ação)"
             else
@@ -145,7 +145,9 @@ execute_status_check() {
                 fi
             fi
             ;;
-        402) 
+        402)
+            printf 'HTTP_STATUS=%s\nTIMESTAMP="%s"\n' "$http_code" "$(date '+%Y-%m-%d %H:%M:%S')" > "$LAST_RESPONSE_FILE"
+            chmod 600 "$LAST_RESPONSE_FILE"
             local pm2_bin
             pm2_bin=$(find_pm2)
             if [[ -n "$pm2_bin" ]]; then
@@ -155,7 +157,7 @@ execute_status_check() {
                 log "AVISO: pm2 não encontrado em nenhum caminho"
             fi
             ;;
-        *) log "Status $http_code ignorado" ;;
+        *) log "Status $http_code ignorado, last_status mantido ($last_status)" ;;
     esac
 }
 

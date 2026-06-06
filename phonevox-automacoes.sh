@@ -214,6 +214,10 @@ EOF
     log "Service + timer instalados"
 }
 
+configs_exist() {
+    [[ -f "$URL_CONFIG" && -f "$CONFIG_FILE" && -f "$KEY_FILE" ]]
+}
+
 cmd_install() {
     require_root
     init_dirs
@@ -222,43 +226,73 @@ cmd_install() {
     printf '%b\n' "${BOLD}  Instalação - Phonevox Automações${NC}"
     printf '%b\n' "${CYAN}═══════════════════════════════════════${NC}"
     printf '\n'
-    
-    read -rp "$(printf '%b' "${BLUE}URL Base${NC}") (ex: https://auto-blocker.falevox.com.br): " URL_BASE
-    [[ -z "$URL_BASE" ]] && die "URL_BASE vazio"
-    [[ "$URL_BASE" != https://* ]] && URL_BASE="https://${URL_BASE}"
-    
-    printf 'URL_BASE="%s"\nAPI_REGISTER="${URL_BASE}/register"\nAPI_STATUS="${URL_BASE}"\n' "$URL_BASE" > "$URL_CONFIG"
-    chmod 600 "$URL_CONFIG"
 
-    printf '%b\n' "\nTipos disponíveis: ${YELLOW}opa${NC}, ${YELLOW}pabx${NC}, ${YELLOW}did${NC}"
-    read -rp "$(printf '%b' "${BLUE}Type${NC}"): " TYPE
-    validate_type "$TYPE"
-    
-    read -rp "$(printf '%b' "${BLUE}Code${NC}") (máx 255): " CODE
-    validate_code "$CODE"
+    if configs_exist; then
+        printf '%b\n' "${GREEN}Configs existentes encontradas — reutilizando.${NC}"
+    else
+        read -rp "$(printf '%b' "${BLUE}URL Base${NC}") (ex: https://auto-blocker.falevox.com.br): " URL_BASE
+        [[ -z "$URL_BASE" ]] && die "URL_BASE vazio"
+        [[ "$URL_BASE" != https://* ]] && URL_BASE="https://${URL_BASE}"
 
-    load_urls
-    printf '%b\n' "\n${RED}╔═════════════════════════════════════════════════════╗${NC}"
-    printf '%b\n' "${RED}║ ⚠️  IMPORTANTE - REDE PERMITIDA OBRIGATÓRIA         ║${NC}"
-    printf '%b\n' "${RED}╠═════════════════════════════════════════════════════╣${NC}"
-    printf '%b\n' "${RED}║ Este comando DEVE ser executado APENAS em uma      ║${NC}"
-    printf '%b\n' "${RED}║ máquina conectada à rede permitida (VPN/Interna)   ║${NC}"
-    printf '%b\n' "${RED}║ Não execute em rede pública ou sem autorização!    ║${NC}"
-    printf '%b\n' "${RED}╚═════════════════════════════════════════════════════╝${NC}\n"
-    printf '%b\n' "${GREEN}▶ Copie e execute no Windows/seu sistema:${NC}\n"
-    CURL_CMD=$(generate_register_curl "$TYPE" "$CODE")
-    printf '%b\n' "${BOLD}${YELLOW}${CURL_CMD}${NC}\n"
-    
-    read -rsp "$(printf '%b' "${CYAN}Cole aqui o crypted_key recebido${NC}"): " CRYPTED_KEY
-    printf '\n'
-    [[ -z "$CRYPTED_KEY" ]] && die "crypted_key vazio"
-    
-    save_key_config "$TYPE" "$CODE" "$CRYPTED_KEY"
+        printf 'URL_BASE="%s"\nAPI_REGISTER="${URL_BASE}/register"\nAPI_STATUS="${URL_BASE}"\n' "$URL_BASE" > "$URL_CONFIG"
+        chmod 600 "$URL_CONFIG"
+
+        printf '%b\n' "\nTipos disponíveis: ${YELLOW}opa${NC}, ${YELLOW}pabx${NC}, ${YELLOW}did${NC}"
+        read -rp "$(printf '%b' "${BLUE}Type${NC}"): " TYPE
+        validate_type "$TYPE"
+
+        read -rp "$(printf '%b' "${BLUE}Code${NC}") (máx 255): " CODE
+        validate_code "$CODE"
+
+        load_urls
+        printf '%b\n' "\n${RED}╔═════════════════════════════════════════════════════╗${NC}"
+        printf '%b\n' "${RED}║ ⚠️  IMPORTANTE - REDE PERMITIDA OBRIGATÓRIA         ║${NC}"
+        printf '%b\n' "${RED}╠═════════════════════════════════════════════════════╣${NC}"
+        printf '%b\n' "${RED}║ Este comando DEVE ser executado APENAS em uma      ║${NC}"
+        printf '%b\n' "${RED}║ máquina conectada à rede permitida (VPN/Interna)   ║${NC}"
+        printf '%b\n' "${RED}║ Não execute em rede pública ou sem autorização!    ║${NC}"
+        printf '%b\n' "${RED}╚═════════════════════════════════════════════════════╝${NC}\n"
+        printf '%b\n' "${GREEN}▶ Copie e execute no Windows/seu sistema:${NC}\n"
+        CURL_CMD=$(generate_register_curl "$TYPE" "$CODE")
+        printf '%b\n' "${BOLD}${YELLOW}${CURL_CMD}${NC}\n"
+
+        read -rsp "$(printf '%b' "${CYAN}Cole aqui o crypted_key recebido${NC}"): " CRYPTED_KEY
+        printf '\n'
+        [[ -z "$CRYPTED_KEY" ]] && die "crypted_key vazio"
+
+        save_key_config "$TYPE" "$CODE" "$CRYPTED_KEY"
+    fi
+
     install_service
     printf '%b\n' "${GREEN}✓ Instalação OK${NC}"
-    
+
     printf '\n%b\n' "${BLUE}Executando verificação inicial de status...${NC}"
     execute_status_check
+}
+
+cmd_remove() {
+    require_root
+
+    printf '%b\n' "${CYAN}════════════════════════════════════════${NC}"
+    printf '%b\n' "${BOLD}  Removendo Phonevox Automações${NC}"
+    printf '%b\n' "${CYAN}════════════════════════════════════════${NC}\n"
+
+    systemctl stop phonevox-automacoes.timer 2>/dev/null || true
+    systemctl stop phonevox-automacoes.service 2>/dev/null || true
+    systemctl disable phonevox-automacoes.timer 2>/dev/null || true
+    rm -f /etc/systemd/system/phonevox-automacoes.service
+    rm -f /etc/systemd/system/phonevox-automacoes.timer
+    systemctl daemon-reload
+    rm -f /usr/local/sbin/phonevox-automacoes
+    printf '%b\n' "${GREEN}✓ Service, timer e binário removidos${NC}"
+
+    read -rp "$(printf '%b' "${YELLOW}Remover configs e chaves em ${CONFIG_DIR}? [s/N]: ${NC}")" RESP
+    if [[ "${RESP,,}" == "s" ]]; then
+        rm -rf "$CONFIG_DIR"
+        printf '%b\n' "${GREEN}✓ Configs removidas${NC}"
+    else
+        printf '%b\n' "${BLUE}Configs mantidas em ${CONFIG_DIR}${NC}"
+    fi
 }
 
 cmd_reconfig() {
@@ -387,6 +421,7 @@ cmd_help() {
     printf '%b\n' "  ${YELLOW}--update${NC}    Faz git pull e atualiza script"
     printf '%b\n' "  ${YELLOW}--start${NC}     Inicia o service e timer"
     printf '%b\n' "  ${YELLOW}--stop${NC}      Para o service e timer"
+    printf '%b\n' "  ${YELLOW}--remove${NC}    Remove service, timer e binário (pergunta sobre configs)"
     printf '%b\n' "  ${YELLOW}--help${NC}      Este menu\n"
     printf '%b\n' "${BOLD}Flags:${NC}"
     printf '%b\n' "  ${YELLOW}--dry-run${NC}   (com --run) Testa sem executar pm2"
@@ -427,6 +462,7 @@ cmd_update() {
 
     install_service
     printf '%b\n' "${GREEN}✓ Systemd units atualizados${NC}"
+    exit 0
 }
 
 case "${1:---help}" in
@@ -438,6 +474,7 @@ case "${1:---help}" in
     --update) cmd_update ;;
     --start) cmd_start ;;
     --stop) cmd_stop ;;
+    --remove) cmd_remove ;;
     --help) cmd_help ;;
     *) cmd_help ;;
 esac

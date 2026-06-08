@@ -165,7 +165,7 @@ execute_status_check() {
 save_key_config() {
     printf '%s' "$3" > "$KEY_FILE"
     chmod 600 "$KEY_FILE"
-    printf 'TYPE=%s\nCODE=%s\n' "$1" "$2" > "$CONFIG_FILE"
+    printf 'TYPE=%s\n' "$1" > "$CONFIG_FILE"
     chmod 600 "$CONFIG_FILE"
     log "Key e config salvos"
 }

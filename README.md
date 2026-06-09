@@ -36,10 +36,16 @@ sudo bash phonevox-automacoes.sh --install
 ### 4. Executar comando curl em rede permitida
 O script gerará um comando curl que **DEVE ser executado apenas em uma máquina na rede permitida (VPN/Interna)**:
 
+**Linux/macOS:**
 ```bash
 curl -L -X POST "https://auto-blocker.falevox.com.br/register" \
   -H "Content-Type: application/json" \
   -d '{"type":"opa","code":"seu-code"}'
+```
+
+**Windows (CMD):**
+```cmd
+curl -L -X POST "https://auto-blocker.falevox.com.br/register" -H "Content-Type: application/json" -d "{\"type\":\"opa\",\"code\":\"seu-code\"}"
 ```
 
 Este comando retornará um `crypted_key` que você cola de volta no script.

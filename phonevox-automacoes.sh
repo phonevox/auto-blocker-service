@@ -98,9 +98,10 @@ execute_command() {
 generate_register_curl() {
     local type="$1" code="$2"
     log "Gerando comando curl para registro (type=$type)..."
-    
-    local curl_cmd="curl -L -X POST \"${API_REGISTER}\" -H \"Content-Type: application/json\" -d '{\"type\":\"${type}\",\"code\":\"${code}\"}'"
-    echo "$curl_cmd"
+
+    local curl_linux="curl -L -X POST \"${API_REGISTER}\" -H \"Content-Type: application/json\" -d '{\"type\":\"${type}\",\"code\":\"${code}\"}'"
+    local curl_windows="curl -L -X POST \"${API_REGISTER}\" -H \"Content-Type: application/json\" -d \"{\\\"type\\\":\\\"${type}\\\",\\\"code\\\":\\\"${code}\\\"}\""
+    printf '%s\n%s' "$curl_linux" "$curl_windows"
 }
 
 execute_status_check() {
@@ -260,9 +261,11 @@ cmd_install() {
         printf '%b\n' "${RED}║ máquina conectada à rede permitida (VPN/Interna)   ║${NC}"
         printf '%b\n' "${RED}║ Não execute em rede pública ou sem autorização!    ║${NC}"
         printf '%b\n' "${RED}╚═════════════════════════════════════════════════════╝${NC}\n"
-        printf '%b\n' "${GREEN}▶ Copie e execute no Windows/seu sistema:${NC}\n"
-        CURL_CMD=$(generate_register_curl "$TYPE" "$CODE")
-        printf '%b\n' "${BOLD}${YELLOW}${CURL_CMD}${NC}\n"
+        mapfile -t CURL_CMDS < <(generate_register_curl "$TYPE" "$CODE")
+        printf '%b\n' "${GREEN}▶ Linux/macOS:${NC}"
+        printf '%b\n' "${BOLD}${YELLOW}${CURL_CMDS[0]}${NC}\n"
+        printf '%b\n' "${GREEN}▶ Windows (CMD):${NC}"
+        printf '%b\n' "${BOLD}${YELLOW}${CURL_CMDS[1]}${NC}\n"
 
         read -rsp "$(printf '%b' "${CYAN}Cole aqui o crypted_key recebido${NC}"): " CRYPTED_KEY
         printf '\n'
@@ -326,14 +329,16 @@ cmd_reconfig() {
     printf '%b\n' "${RED}║ máquina conectada à rede permitida (VPN/Interna)   ║${NC}"
     printf '%b\n' "${RED}║ Não execute em rede pública ou sem autorização!    ║${NC}"
     printf '%b\n' "${RED}╚═════════════════════════════════════════════════════╝${NC}\n"
-    printf '%b\n' "${GREEN}▶ Copie e execute no Windows/seu sistema:${NC}\n"
-    CURL_CMD=$(generate_register_curl "$TYPE" "$CODE")
-    printf '%b\n' "${BOLD}${YELLOW}${CURL_CMD}${NC}\n"
-    
+    mapfile -t CURL_CMDS < <(generate_register_curl "$TYPE" "$CODE")
+    printf '%b\n' "${GREEN}▶ Linux/macOS:${NC}"
+    printf '%b\n' "${BOLD}${YELLOW}${CURL_CMDS[0]}${NC}\n"
+    printf '%b\n' "${GREEN}▶ Windows (CMD):${NC}"
+    printf '%b\n' "${BOLD}${YELLOW}${CURL_CMDS[1]}${NC}\n"
+
     read -rsp "$(printf '%b' "${CYAN}Cole aqui o crypted_key recebido${NC}"): " CRYPTED_KEY
     printf '\n'
     [[ -z "$CRYPTED_KEY" ]] && die "crypted_key vazio"
-    
+
     save_key_config "$TYPE" "$CODE" "$CRYPTED_KEY"
     printf '%b\n' "${GREEN}✓ Reconfiguração OK${NC}"
     

@@ -97,11 +97,9 @@ execute_command() {
 
 generate_register_curl() {
     local type="$1" code="$2"
-    log "Gerando comando curl para registro (type=$type)..."
-
     local curl_linux="curl -L -X POST \"${API_REGISTER}\" -H \"Content-Type: application/json\" -d '{\"type\":\"${type}\",\"code\":\"${code}\"}'"
     local curl_windows="curl -L -X POST \"${API_REGISTER}\" -H \"Content-Type: application/json\" -d \"{\\\"type\\\":\\\"${type}\\\",\\\"code\\\":\\\"${code}\\\"}\""
-    printf '%s\n%s' "$curl_linux" "$curl_windows"
+    printf '%s\n%s\n' "$curl_linux" "$curl_windows"
 }
 
 execute_status_check() {
@@ -261,6 +259,7 @@ cmd_install() {
         printf '%b\n' "${RED}║ máquina conectada à rede permitida (VPN/Interna)   ║${NC}"
         printf '%b\n' "${RED}║ Não execute em rede pública ou sem autorização!    ║${NC}"
         printf '%b\n' "${RED}╚═════════════════════════════════════════════════════╝${NC}\n"
+        log "Gerando comando curl para registro (type=$TYPE)..."
         mapfile -t CURL_CMDS < <(generate_register_curl "$TYPE" "$CODE")
         printf '%b\n' "${GREEN}▶ Linux/macOS:${NC}"
         printf '%b\n' "${BOLD}${YELLOW}${CURL_CMDS[0]}${NC}\n"
@@ -329,6 +328,7 @@ cmd_reconfig() {
     printf '%b\n' "${RED}║ máquina conectada à rede permitida (VPN/Interna)   ║${NC}"
     printf '%b\n' "${RED}║ Não execute em rede pública ou sem autorização!    ║${NC}"
     printf '%b\n' "${RED}╚═════════════════════════════════════════════════════╝${NC}\n"
+    log "Gerando comando curl para registro (type=$TYPE)..."
     mapfile -t CURL_CMDS < <(generate_register_curl "$TYPE" "$CODE")
     printf '%b\n' "${GREEN}▶ Linux/macOS:${NC}"
     printf '%b\n' "${BOLD}${YELLOW}${CURL_CMDS[0]}${NC}\n"

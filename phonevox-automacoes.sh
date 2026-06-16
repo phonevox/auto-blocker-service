@@ -207,8 +207,6 @@ After=network-online.target
 Type=oneshot
 ExecStart=/usr/local/sbin/phonevox-automacoes --run
 User=root
-StandardOutput=append:/var/log/phonevox-automacoes.log
-StandardError=append:/var/log/phonevox-automacoes.log
 EOF
 
     cat > /etc/systemd/system/phonevox-automacoes.timer <<'EOF'

@@ -501,6 +501,11 @@ cmd_update() {
     local repo_dir
     repo_dir=$(resolve_repo_dir)
     
+    if ! git -C "$repo_dir" diff --quiet || ! git -C "$repo_dir" diff --cached --quiet; then
+        printf '%b\n' "${YELLOW}Mudanças locais detectadas, descartando...${NC}"
+        git -C "$repo_dir" reset --hard HEAD >/dev/null
+    fi
+
     if ! git -C "$repo_dir" pull; then
         die "Erro ao fazer git pull em $repo_dir"
     fi

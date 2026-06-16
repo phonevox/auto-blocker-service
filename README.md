@@ -7,7 +7,7 @@ Script bash para gerenciar automações do Phonevox com verificação de status 
 - ✅ Instalação automatizada com systemd
 - ✅ Timer para execução a cada 10 minutos
 - ✅ Verificação de status via API REST
-- ✅ Integração com PM2 para restart/stop automático
+- ✅ Integração com PM2 (opa) ou Asterisk (pabx) para restart/stop automático
 - ✅ Reutiliza configs existentes no `--install` sem pedir novamente
 - ✅ Atualização via `--update` de qualquer diretório
 - ✅ Rotação de logs nativa (máx 10MB)
@@ -28,8 +28,8 @@ sudo bash phonevox-automacoes.sh --install
 
 ### 3. Durante a instalação você precisará:
 - **URL Base**: URL do servidor (ex: `https://auto-blocker.falevox.com.br`)
-- **Type**: `opa`, `pabx` ou `did`
-- **Code**: Código único para sua instalação (máx 255 caracteres)
+- **Type**: `opa` ou `pabx`
+- **Key**: Código único para sua instalação (máx 255 caracteres)
 
 > Se já existirem configs salvas em `/etc/phonevox/automacoes/`, o `--install` as reutiliza sem pedir novamente.
 
@@ -63,7 +63,7 @@ Após colar a `crypted_key`, o script irá:
 phonevox-automacoes --install       # Configurar e instalar (reutiliza configs se existirem)
 phonevox-automacoes --reconfig      # Regenerar crypted_key
 phonevox-automacoes --run           # Executar verificação de status
-phonevox-automacoes --run --dry-run # Testar sem executar pm2
+phonevox-automacoes --run --dry-run # Testar sem executar pm2/asterisk
 phonevox-automacoes --status        # Exibir configuração completa
 phonevox-automacoes --logs          # Ver últimas 100 linhas do log
 phonevox-automacoes --update        # Git pull + atualiza script (funciona de qualquer diretório)
@@ -103,10 +103,14 @@ Logs são rotacionados automaticamente quando atingem 10MB. Arquivos antigos fic
    ```
    GET /?type={TYPE}&crypted_key={KEY}&last_status={STATUS}
    ```
-3. **Script processa resposta**:
+3. **Script processa resposta** (ação depende do `TYPE`):
    - `HTTP 200` + last_status = 200 → Sem ação (sistema OK)
-   - `HTTP 200` + last_status ≠ 200 → Executa `pm2 restart all`
-   - `HTTP 402` → Executa `pm2 stop all`
+   - `HTTP 200` + last_status ≠ 200 →
+     - `opa` → `pm2 restart all`
+     - `pabx` → `service asterisk restart`
+   - `HTTP 402` →
+     - `opa` → `pm2 stop all`
+     - `pabx` → `service asterisk stop`
    - Qualquer outro código → Ignora, **não altera o last_status salvo**
 
 4. **Salva último status** apenas para respostas 200 ou 402 — outros códigos (308, 404, 500, etc.) são ignorados sem sobrescrever o estado anterior
@@ -117,7 +121,8 @@ Logs são rotacionados automaticamente quando atingem 10MB. Arquivos antigos fic
 - **curl**
 - **git** (para `--update`)
 - **Python 3** (para URL encoding)
-- **PM2** (opcional, para restart/stop automático)
+- **PM2** (opcional, usado quando `TYPE=opa`)
+- **Asterisk** (opcional, usado quando `TYPE=pabx`)
 - **root** (para instalar service systemd)
 
 ## 🔐 Segurança
@@ -179,10 +184,16 @@ sudo phonevox-automacoes --run --dry-run
 sudo phonevox-automacoes --fix-bin
 ```
 
-### PM2 não encontrado
+### PM2 não encontrado (TYPE=opa)
 O script loga um aviso e continua. Para instalar:
 ```bash
 npm install -g pm2
+```
+
+### Asterisk não responde (TYPE=pabx)
+O script chama `service asterisk restart|stop`. Verifique manualmente:
+```bash
+service asterisk status
 ```
 
 ### Verificar timer
@@ -200,7 +211,7 @@ sudo phonevox-automacoes --run
 
 | Variável  | Padrão | Descrição                                     |
 |-----------|--------|-----------------------------------------------|
-| `DRY_RUN` | `0`    | Se `1`, simula ações sem executar pm2 de fato |
+| `DRY_RUN` | `0`    | Se `1`, simula ações sem executar pm2/asterisk |
 
 ```bash
 DRY_RUN=1 sudo phonevox-automacoes --run

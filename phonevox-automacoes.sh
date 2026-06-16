@@ -45,7 +45,7 @@ die() { printf '%b\n' "${RED}[ERRO]${NC} $*" >&2; exit 1; }
 require_root() { [[ $EUID -ne 0 ]] && die "Execute como root."; }
 init_dirs() { mkdir -p "$CONFIG_DIR"; chmod 700 "$CONFIG_DIR"; touch "$LOG_FILE"; chmod 600 "$LOG_FILE"; }
 
-validate_type() { [[ "$1" =~ ^(opa|pabx|did)$ ]] || die "Tipo inválido: '$1'"; }
+validate_type() { [[ "$1" =~ ^(opa|pabx)$ ]] || die "Tipo inválido: '$1'"; }
 validate_code() { [[ -n "$1" && ${#1} -le 255 ]] || die "Code inválido"; }
 
 acquire_lock() {
@@ -134,6 +134,9 @@ execute_status_check() {
             chmod 600 "$LAST_RESPONSE_FILE"
             if [[ "$last_status" == "200" ]]; then
                 log "Status 200 (sem mudança, nenhuma ação)"
+            elif [[ "$TYPE" == "pabx" ]]; then
+                log "Ação: service asterisk restart"
+                execute_command "service asterisk restart >> \"$LOG_FILE\" 2>&1"
             else
                 local pm2_bin
                 pm2_bin=$(find_pm2)
@@ -148,13 +151,18 @@ execute_status_check() {
         402)
             printf 'HTTP_STATUS=%s\nTIMESTAMP="%s"\n' "$http_code" "$(date '+%Y-%m-%d %H:%M:%S')" > "$LAST_RESPONSE_FILE"
             chmod 600 "$LAST_RESPONSE_FILE"
-            local pm2_bin
-            pm2_bin=$(find_pm2)
-            if [[ -n "$pm2_bin" ]]; then
-                log "Ação: pm2 stop all"
-                execute_command "\"$pm2_bin\" stop all >> \"$LOG_FILE\" 2>&1"
+            if [[ "$TYPE" == "pabx" ]]; then
+                log "Ação: service asterisk stop"
+                execute_command "service asterisk stop >> \"$LOG_FILE\" 2>&1"
             else
-                log "AVISO: pm2 não encontrado em nenhum caminho"
+                local pm2_bin
+                pm2_bin=$(find_pm2)
+                if [[ -n "$pm2_bin" ]]; then
+                    log "Ação: pm2 stop all"
+                    execute_command "\"$pm2_bin\" stop all >> \"$LOG_FILE\" 2>&1"
+                else
+                    log "AVISO: pm2 não encontrado em nenhum caminho"
+                fi
             fi
             ;;
         *) log "Status $http_code ignorado, last_status mantido ($last_status)" ;;
@@ -244,11 +252,11 @@ cmd_install() {
         printf 'URL_BASE="%s"\nAPI_REGISTER="${URL_BASE}/register"\nAPI_STATUS="${URL_BASE}"\n' "$URL_BASE" > "$URL_CONFIG"
         chmod 600 "$URL_CONFIG"
 
-        printf '%b\n' "\nTipos disponíveis: ${YELLOW}opa${NC}, ${YELLOW}pabx${NC}, ${YELLOW}did${NC}"
+        printf '%b\n' "\nTipos disponíveis: ${YELLOW}opa${NC}, ${YELLOW}pabx${NC}"
         read -rp "$(printf '%b' "${BLUE}Type${NC}"): " TYPE
         validate_type "$TYPE"
 
-        read -rp "$(printf '%b' "${BLUE}Code${NC}") (máx 255): " CODE
+        read -rp "$(printf '%b' "${BLUE}Key${NC}") (máx 255): " CODE
         validate_code "$CODE"
 
         load_urls
@@ -313,11 +321,11 @@ cmd_reconfig() {
     printf '%b\n' "${BOLD}  Reconfiguração - Phonevox Automações${NC}"
     printf '%b\n' "${CYAN}═══════════════════════════════════════${NC}\n"
 
-    printf '%b\n' "Tipos disponíveis: ${YELLOW}opa${NC}, ${YELLOW}pabx${NC}, ${YELLOW}did${NC}"
+    printf '%b\n' "Tipos disponíveis: ${YELLOW}opa${NC}, ${YELLOW}pabx${NC}"
     read -rp "$(printf '%b' "${BLUE}Type${NC}"): " TYPE
     validate_type "$TYPE"
     
-    read -rp "$(printf '%b' "${BLUE}Code${NC}") (máx 255): " CODE
+    read -rp "$(printf '%b' "${BLUE}Key${NC}") (máx 255): " CODE
     validate_code "$CODE"
 
     load_urls
